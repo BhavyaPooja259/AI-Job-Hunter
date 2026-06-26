@@ -8,5 +8,12 @@ AI agents that perform intelligent tasks across the job hunting pipeline.
 
 from agents.scout_agent import ScoutAgent
 from agents.ranking_agent import RankingAgent, RankedJob
+from agents.resume_tailoring_agent import ResumeTailoringAgent, TailoringResult
+from agents.notification_agent import NotificationAgent, NotificationResult
 
-__all__ = ["ScoutAgent", "RankingAgent", "RankedJob"]
+__all__ = [
+    "ScoutAgent",
+    "RankingAgent", "RankedJob",
+    "ResumeTailoringAgent", "TailoringResult",
+    "NotificationAgent", "NotificationResult",
+]

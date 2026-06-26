@@ -30,13 +30,13 @@ class Settings(BaseSettings):
     # AI Provider
     # -------------------------------------------------------------------------
 
-    anthropic_api_key: str = Field(
+    gemini_api_key: str = Field(
         default="",
-        description="Claude API key from console.anthropic.com",
+        description="Google Gemini API key from aistudio.google.com",
     )
     ai_model: str = Field(
-        default="claude-sonnet-4-6",
-        description="Claude model ID used for all AI tasks",
+        default="gemini-2.0-flash",
+        description="Gemini model ID used for all AI tasks",
     )
     ai_max_tokens: int = Field(
         default=4096,

@@ -1,26 +1,26 @@
 """
 Sprint 12 — RankingAgent unit tests.
 
-All tests use a mocked Anthropic client; no real API calls are made.
+All tests use a mocked Gemini client; no real API calls are made.
 
 Design principles
 -----------------
-Mock at the boundary: we mock `anthropic.Anthropic().messages.create`, not
+Mock at the boundary: we mock `genai.Client().models.generate_content`, not
 internal methods.  This means the tests are verifying the same code path that
-runs in production — they exercise prompt building, tool-call parsing,
-Pydantic validation, caching, and failure handling.
+runs in production — they exercise prompt building, JSON parsing, Pydantic
+validation, caching, and failure handling.
 
-The mock client always returns a properly shaped tool-use response:
-  response.content = [ToolUseBlock(type="tool_use", input={...})]
-  response.stop_reason = "tool_use"
+The mock client always returns a properly shaped JSON response:
+  response.text = json.dumps({...})   # a valid AIMatchResult JSON payload
 
-This mirrors exactly what the real Anthropic API returns when
-tool_choice={"type": "tool", "name": "submit_job_ranking"} is set.
+This mirrors exactly what the real Gemini API returns when
+response_mime_type="application/json" and response_schema=AIMatchResult are set.
 
 Run from the project root:
     python -m pytest tests/test_ai_ranking.py -v
 """
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call
@@ -61,41 +61,30 @@ def _make_job(
     )
 
 
-def _mock_client(tool_input: dict) -> MagicMock:
-    """Return a mock Anthropic client that always returns `tool_input` as the tool call."""
-    block = MagicMock()
-    block.type = "tool_use"
-    block.name = "submit_job_ranking"
-    block.input = tool_input
-
+def _mock_client(payload: dict) -> MagicMock:
+    """Return a mock Gemini client that always returns `payload` as the JSON response."""
     response = MagicMock()
-    response.content = [block]
-    response.stop_reason = "tool_use"
+    response.text = json.dumps(payload)
 
     client = MagicMock()
-    client.messages.create.return_value = response
+    client.models.generate_content.return_value = response
     return client
 
 
 def _error_client(exc: Exception) -> MagicMock:
-    """Return a mock Anthropic client that always raises `exc`."""
+    """Return a mock Gemini client that always raises `exc`."""
     client = MagicMock()
-    client.messages.create.side_effect = exc
+    client.models.generate_content.side_effect = exc
     return client
 
 
-def _no_tool_client() -> MagicMock:
-    """Return a mock client whose response contains no tool_use block."""
-    text_block = MagicMock()
-    text_block.type = "text"
-    text_block.text = "I think this job is a good fit."
-
+def _empty_response_client() -> MagicMock:
+    """Return a mock client whose response has no text (simulates empty/failed response)."""
     response = MagicMock()
-    response.content = [text_block]
-    response.stop_reason = "end_turn"
+    response.text = None
 
     client = MagicMock()
-    client.messages.create.return_value = response
+    client.models.generate_content.return_value = response
     return client
 
 
@@ -238,31 +227,32 @@ class TestRankOneHappyPath:
         assert isinstance(result, AIMatchResult)
         assert result.score == 82
 
-    def test_calls_messages_create_once(self):
+    def test_calls_generate_content_once(self):
         client = _mock_client(_VALID_PAYLOAD)
         agent = RankingAgent(client=client)
         agent.rank_one(_make_job())
-        client.messages.create.assert_called_once()
+        client.models.generate_content.assert_called_once()
 
-    def test_messages_create_uses_correct_model(self):
+    def test_generate_content_uses_correct_model(self):
         client = _mock_client(_VALID_PAYLOAD)
-        agent = RankingAgent(client=client, model="claude-haiku-4-5-20251001")
+        agent = RankingAgent(client=client, model="gemini-1.5-flash")
         agent.rank_one(_make_job())
-        kwargs = client.messages.create.call_args.kwargs
-        assert kwargs["model"] == "claude-haiku-4-5-20251001"
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] == "gemini-1.5-flash"
 
-    def test_tool_choice_forces_submit_job_ranking(self):
+    def test_json_mode_is_enabled(self):
         client = _mock_client(_VALID_PAYLOAD)
         agent = RankingAgent(client=client)
         agent.rank_one(_make_job())
-        kwargs = client.messages.create.call_args.kwargs
-        assert kwargs["tool_choice"] == {"type": "tool", "name": "submit_job_ranking"}
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["config"].response_mime_type == "application/json"
+        assert kwargs["config"].response_schema == AIMatchResult
 
     def test_system_prompt_contains_candidate_profile(self):
         client = _mock_client(_VALID_PAYLOAD)
         agent = RankingAgent(client=client, profile=DEFAULT_PROFILE)
         agent.rank_one(_make_job())
-        system = client.messages.create.call_args.kwargs["system"]
+        system = client.models.generate_content.call_args.kwargs["config"].system_instruction
         assert "Java" in system
         assert "Spring Boot" in system
         assert str(DEFAULT_PROFILE.years_of_experience) in system
@@ -277,27 +267,27 @@ class TestRankOneHappyPath:
             description="We use Spark and Scala for data processing.",
         )
         agent.rank_one(job, rule_score=55)
-        msg_content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "Databricks" in msg_content
-        assert "Platform Engineer" in msg_content
-        assert "San Francisco, CA" in msg_content
-        assert "55/100" in msg_content
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert "Databricks" in contents
+        assert "Platform Engineer" in contents
+        assert "San Francisco, CA" in contents
+        assert "55/100" in contents
 
     def test_description_is_included_in_user_message(self):
         client = _mock_client(_VALID_PAYLOAD)
         agent = RankingAgent(client=client)
         job = _make_job(description="Must know Java and Spring Boot.")
         agent.rank_one(job)
-        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "Must know Java and Spring Boot." in content
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert "Must know Java and Spring Boot." in contents
 
     def test_requirements_is_included_in_user_message(self):
         client = _mock_client(_VALID_PAYLOAD)
         agent = RankingAgent(client=client)
         job = _make_job(requirements="5+ years of Java experience required.")
         agent.rank_one(job)
-        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "5+ years of Java experience required." in content
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert "5+ years of Java experience required." in contents
 
 
 # ---------------------------------------------------------------------------
@@ -311,8 +301,8 @@ class TestRankOneFailurePaths:
         result = agent.rank_one(_make_job())
         assert result is None
 
-    def test_returns_none_if_no_tool_block_in_response(self):
-        agent = RankingAgent(client=_no_tool_client())
+    def test_returns_none_if_response_text_is_empty(self):
+        agent = RankingAgent(client=_empty_response_client())
         result = agent.rank_one(_make_job())
         assert result is None
 
@@ -345,7 +335,7 @@ class TestCaching:
         result2 = agent.rank_one(job)
 
         assert result1 == result2
-        assert client.messages.create.call_count == 1  # API called once, not twice
+        assert client.models.generate_content.call_count == 1  # API called once, not twice
 
     def test_different_jobs_produce_separate_cache_entries(self):
         client = _mock_client(_VALID_PAYLOAD)
@@ -357,7 +347,7 @@ class TestCaching:
         agent.rank_one(job_a)
         agent.rank_one(job_b)
 
-        assert client.messages.create.call_count == 2
+        assert client.models.generate_content.call_count == 2
 
     def test_cache_size_reflects_stored_results(self):
         client = _mock_client(_VALID_PAYLOAD)
@@ -392,7 +382,7 @@ class TestCaching:
         result_b = agent_b.rank_one(job)  # should hit cache set by agent_a
 
         assert result_a is result_b  # exact same object from cache
-        assert client_b.messages.create.call_count == 0  # agent_b never called the API
+        assert client_b.models.generate_content.call_count == 0  # agent_b never called the API
 
     def test_different_profile_different_cache_key(self):
         """Changing the profile invalidates the cache."""
@@ -410,20 +400,20 @@ class TestCaching:
         agent_a.rank_one(job)
         agent_b.rank_one(job)
 
-        assert client.messages.create.call_count == 2  # two different cache keys
+        assert client.models.generate_content.call_count == 2  # two different cache keys
 
     def test_different_model_different_cache_key(self):
         shared_cache: dict = {}
         client = _mock_client(_VALID_PAYLOAD)
 
-        agent_a = RankingAgent(client=client, model="claude-sonnet-4-6", cache=shared_cache)
-        agent_b = RankingAgent(client=client, model="claude-haiku-4-5-20251001", cache=shared_cache)
+        agent_a = RankingAgent(client=client, model="gemini-2.0-flash", cache=shared_cache)
+        agent_b = RankingAgent(client=client, model="gemini-1.5-flash", cache=shared_cache)
 
         job = _make_job()
         agent_a.rank_one(job)
         agent_b.rank_one(job)
 
-        assert client.messages.create.call_count == 2
+        assert client.models.generate_content.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -435,17 +425,14 @@ class TestRankBatch:
     def _make_client_sequence(self, payloads: list[dict]) -> MagicMock:
         """Client that returns each payload in sequence."""
         client = MagicMock()
-        client.messages.create.side_effect = [
+        client.models.generate_content.side_effect = [
             self._make_response(p) for p in payloads
         ]
         return client
 
-    def _make_response(self, tool_input: dict) -> MagicMock:
-        block = MagicMock()
-        block.type = "tool_use"
-        block.input = tool_input
+    def _make_response(self, payload: dict) -> MagicMock:
         resp = MagicMock()
-        resp.content = [block]
+        resp.text = json.dumps(payload)
         return resp
 
     def test_rank_returns_ranked_job_list(self):
@@ -486,15 +473,12 @@ class TestRankBatch:
             call_count += 1
             if call_count == 2:
                 raise RuntimeError("rate limit hit")
-            block = MagicMock()
-            block.type = "tool_use"
-            block.input = _VALID_PAYLOAD
             resp = MagicMock()
-            resp.content = [block]
+            resp.text = json.dumps(_VALID_PAYLOAD)
             return resp
 
         client = MagicMock()
-        client.messages.create.side_effect = side_effect
+        client.models.generate_content.side_effect = side_effect
 
         agent = RankingAgent(client=client)
         ranked = agent.rank([job_a, job_b, job_c])
@@ -510,7 +494,7 @@ class TestRankBatch:
         agent = RankingAgent(client=client)
         job = _make_job()  # same fingerprint both times
         ranked = agent.rank([job, job])
-        assert client.messages.create.call_count == 1  # cached after first
+        assert client.models.generate_content.call_count == 1  # cached after first
 
     def test_rank_from_repository(self):
         """rank_from_repository reads jobs from the repo and returns RankedJob objects."""
@@ -537,9 +521,9 @@ class TestDescriptionTruncation:
         agent = RankingAgent(client=client, max_description_chars=3000)
         job = _make_job(description="Short description.")
         agent.rank_one(job)
-        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "Short description." in content
-        assert "truncated" not in content
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert "Short description." in contents
+        assert "truncated" not in contents
 
     def test_long_description_is_truncated(self):
         client = _mock_client(_VALID_PAYLOAD)
@@ -547,9 +531,9 @@ class TestDescriptionTruncation:
         long_text = "X" * 200
         job = _make_job(description=long_text)
         agent.rank_one(job)
-        content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-        assert "truncated" in content
-        assert long_text not in content
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert "truncated" in contents
+        assert long_text not in contents
 
     def test_none_description_handled_gracefully(self):
         client = _mock_client(_VALID_PAYLOAD)

@@ -1,5 +1,5 @@
 """
-RankingAgent — AI-powered job ranking using Anthropic Claude.
+RankingAgent — AI-powered job ranking using Google Gemini.
 
 Why AI ranking complements rule-based scoring
 ---------------------------------------------
@@ -24,15 +24,15 @@ well for clear signals: "Java" appears in the description, the title says
   Holistic fit:    A job at a prestigious company with slightly mismatched tech
                    might still be worth applying to.  Rules cannot express this.
 
-Claude reads the full description the same way a recruiter does — it infers,
+Gemini reads the full description the same way a recruiter does — it infers,
 weighs, and reasons about the whole picture.  The rule score anchors the AI
 (a sanity check) while the AI provides depth the rules cannot.
 
 Why caching is important
 ------------------------
-Claude charges per input token.  A typical job posting sent to Claude costs
-~500–1500 tokens.  Re-ranking 60 Workday jobs from Adobe after a minor profile
-edit would waste 60 × 1500 = 90 000 tokens if results were never cached.
+Gemini charges per input token.  A typical job posting costs ~500–1500 tokens.
+Re-ranking 60 Workday jobs from Adobe after a minor profile edit would waste
+60 × 1500 = 90 000 tokens if results were never cached.
 
 This module caches on:
     SHA-256(job.fingerprint + sorted(profile fields) + model name)
@@ -43,7 +43,7 @@ So the cache hits when:
 
 The cache is invalidated when:
   - The user updates their UserProfile (sorted field values change)
-  - A different Claude model is selected
+  - A different Gemini model is selected
 
 The default cache is in-memory (dict), so it resets each process.  Pass an
 external dict (e.g., loaded from JSON on startup, saved to JSON on exit) to
@@ -53,11 +53,13 @@ Why structured JSON is safer than free-form text
 -------------------------------------------------
 See matching/ai_result.py for the full rationale.  Short version:
 
-  - Tool-use forces Claude to call a named tool with a typed JSON payload.
-    The API layer validates field presence before the response is returned.
+  - response_mime_type="application/json" + response_schema=AIMatchResult
+    tells Gemini to produce a JSON object that matches the Pydantic model.
+    The model is constrained at the API layer before the response arrives.
   - Pydantic provides a second validation layer — range, enum, and string
-    constraints are all checked at parse time.
-  - No regex, no JSON parsing, no "sometimes Claude forgets the score" bugs.
+    constraints are all checked at parse time via model_validate_json().
+  - No regex, no ad-hoc JSON parsing, no "sometimes the model forgets the
+    score" bugs.
 """
 
 from __future__ import annotations
@@ -70,7 +72,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from matching.ai_result import AIMatchResult
 from matching.matcher import JobMatcher, MatchResult
@@ -82,66 +85,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Claude tool definition — forces structured output via tool-use API
-# ---------------------------------------------------------------------------
-
-_RANKING_TOOL: dict = {
-    "name": "submit_job_ranking",
-    "description": (
-        "Submit a structured ranking assessment for a job posting. "
-        "Call this tool exactly once after reading the job details."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "score": {
-                "type": "integer",
-                "description": "Overall match score 0–100 (higher = better fit)",
-                "minimum": 0,
-                "maximum": 100,
-            },
-            "confidence": {
-                "type": "string",
-                "description": "Assessment confidence: 'high' (full description available), 'medium' (partial), or 'low' (title only)",
-                "enum": ["high", "medium", "low"],
-            },
-            "recommendation": {
-                "type": "string",
-                "description": "'apply' (score ≥ 65, no dealbreakers), 'consider' (score 45–64), 'skip' (score < 45 or dealbreaker present)",
-                "enum": ["apply", "consider", "skip"],
-            },
-            "summary": {
-                "type": "string",
-                "description": "1–2 sentence plain-English assessment of the overall fit for the candidate",
-            },
-            "strengths": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Specific ways this candidate's profile aligns with the job's requirements",
-            },
-            "missing_skills": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Skills or experience the job requires that this candidate does not have",
-            },
-            "interview_difficulty": {
-                "type": "string",
-                "description": "Estimated interview bar: 'low', 'medium', 'high', or 'very_high'",
-                "enum": ["low", "medium", "high", "very_high"],
-            },
-        },
-        "required": [
-            "score",
-            "confidence",
-            "recommendation",
-            "summary",
-            "strengths",
-            "missing_skills",
-            "interview_difficulty",
-        ],
-    },
-}
 
 # ---------------------------------------------------------------------------
 # RankedJob — output type that pairs rule-based and AI scores
@@ -187,15 +130,16 @@ class RankedJob:
 
 class RankingAgent:
     """
-    Ranks jobs using Anthropic Claude with in-memory caching and graceful
+    Ranks jobs using Google Gemini with in-memory caching and graceful
     failure handling.
 
     Usage
     -----
-    import anthropic
+    from google import genai
     from agents.ranking_agent import RankingAgent
 
-    agent = RankingAgent(client=anthropic.Anthropic())
+    client = genai.Client(api_key="…")
+    agent = RankingAgent(client=client)
     ranked = agent.rank(jobs)           # list[RankedJob], sorted best-first
 
     # or read directly from the DB
@@ -204,9 +148,9 @@ class RankingAgent:
 
     def __init__(
         self,
-        client: anthropic.Anthropic,
+        client: genai.Client,
         profile: UserProfile = DEFAULT_PROFILE,
-        model: str = "claude-sonnet-4-6",
+        model: str = "gemini-2.0-flash",
         max_tokens: int = 1024,
         max_workers: int = 1,
         max_description_chars: int = 3000,
@@ -216,19 +160,19 @@ class RankingAgent:
         Parameters
         ----------
         client
-            An initialised anthropic.Anthropic() client.  Must have a valid
-            ANTHROPIC_API_KEY set (via env var or explicit api_key argument).
+            An initialised genai.Client() instance.  Must have a valid
+            GEMINI_API_KEY (via api_key argument or GEMINI_API_KEY env var).
 
         profile
             The user's professional background used to build the system prompt.
             Defaults to matching.profile.DEFAULT_PROFILE.
 
         model
-            Claude model identifier.  Defaults to claude-sonnet-4-6.
+            Gemini model identifier.  Defaults to gemini-2.0-flash.
 
         max_tokens
-            Token budget for Claude's response.  1024 is ample for the
-            structured tool call; increase only if summaries are truncating.
+            Token budget for Gemini's response.  1024 is ample for the
+            structured JSON output; increase only if summaries are truncating.
 
         max_workers
             Number of concurrent API calls.  1 (default) = sequential.
@@ -236,7 +180,7 @@ class RankingAgent:
             rate limit tier).
 
         max_description_chars
-            Truncate long descriptions before sending to Claude.  Prevents
+            Truncate long descriptions before sending to Gemini.  Prevents
             runaway token usage for unusually verbose job postings.
 
         cache
@@ -262,7 +206,7 @@ class RankingAgent:
         """
         Rank a list of jobs.  Returns RankedJob objects sorted best-first.
 
-        Rule scores are computed first (instant, free) and passed to Claude
+        Rule scores are computed first (instant, free) and passed to Gemini
         as an anchor.  Jobs whose AI call fails still appear in the results
         with their rule score.
         """
@@ -289,7 +233,7 @@ class RankingAgent:
 
     def rank_one(self, job: Job, rule_score: int = 0) -> AIMatchResult | None:
         """
-        Ask Claude to rank a single job.
+        Ask Gemini to rank a single job.
 
         Returns None if the API call fails for any reason (network error,
         validation failure, rate limit).  Callers should treat None as
@@ -314,29 +258,25 @@ class RankingAgent:
 
         result: AIMatchResult | None = None
         try:
-            response = self._client.messages.create(
+            response = self._client.models.generate_content(
                 model=self._model,
-                max_tokens=self._max_tokens,
-                system=self._system_prompt,
-                tools=[_RANKING_TOOL],
-                tool_choice={"type": "tool", "name": "submit_job_ranking"},
-                messages=[
-                    {
-                        "role": "user",
-                        "content": self._build_user_message(job, rule_score),
-                    }
-                ],
+                contents=self._build_user_message(job, rule_score),
+                config=types.GenerateContentConfig(
+                    system_instruction=self._system_prompt,
+                    response_mime_type="application/json",
+                    response_schema=AIMatchResult,
+                    max_output_tokens=self._max_tokens,
+                ),
             )
 
-            tool_input = self._extract_tool_input(response)
-            if tool_input is None:
+            text = getattr(response, "text", None)
+            if not text:
                 logger.warning(
-                    "no tool_use block in response for %s @ %s",
-                    job.title, job.company,
+                    "empty Gemini response for %s @ %s", job.title, job.company
                 )
                 return None
 
-            result = AIMatchResult.model_validate(tool_input)
+            result = AIMatchResult.model_validate_json(text)
             logger.info(
                 "result     %s @ %s  ai=%d  rec=%s  conf=%s",
                 job.title, job.company,
@@ -435,23 +375,16 @@ class RankingAgent:
         if requirements:
             parts += ["--- Requirements ---", requirements, ""]
 
-        parts.append("Call submit_job_ranking with your structured assessment.")
+        parts.append("Respond with your structured JSON assessment for this job.")
         return "\n".join(parts)
-
-    def _extract_tool_input(self, response: object) -> dict | None:
-        """Return the input dict from the first tool_use block, or None."""
-        for block in getattr(response, "content", []):
-            if getattr(block, "type", None) == "tool_use":
-                return block.input
-        return None
 
     def _cache_key(self, job: Job) -> str:
         """
         Cache key = SHA-256 of (job fingerprint + sorted profile fields + model).
 
         Sorting each list field ensures the key is stable regardless of list
-        ordering in the profile.  Including the model means switching from
-        Sonnet to Haiku automatically invalidates cached assessments.
+        ordering in the profile.  Including the model means switching models
+        automatically invalidates cached assessments.
         """
         p = self._profile
         payload = json.dumps(

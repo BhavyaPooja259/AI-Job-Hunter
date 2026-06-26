@@ -142,7 +142,7 @@
   {
     "name": "Netflix",
     "careers_url": "https://jobs.netflix.com/jobs",
-    "ats": "lever",
+    "ats": "unknown",
     "active": true,
     "priority": 2,
     "country": "US",
@@ -151,7 +151,7 @@
     "supports_remote": false,
     "visa_sponsorship_unknown": true,
     "engineering_company": true,
-    "notes": "No remote policy. Top compensation in the industry. Bar is extremely high."
+    "notes": "No remote policy. Top compensation in the industry. Bar is extremely high. Uses a custom ATS at jobs.netflix.com (not Lever or Greenhouse)."
   },
   {
     "name": "Adobe",
@@ -211,8 +211,8 @@
   },
   {
     "name": "Razorpay",
-    "careers_url": "https://razorpay.com/jobs",
-    "ats": "lever",
+    "careers_url": "https://job-boards.greenhouse.io/razorpaysoftwareprivatelimited",
+    "ats": "greenhouse",
     "active": true,
     "priority": 1,
     "country": "IN",
@@ -221,7 +221,7 @@
     "supports_remote": false,
     "visa_sponsorship_unknown": true,
     "engineering_company": true,
-    "notes": "India's leading payments infrastructure company. Strong Java and microservices culture."
+    "notes": "India's leading payments infrastructure company. Strong Java and microservices culture. Migrated from Lever to Greenhouse (discovered June 2026)."
   },
   {
     "name": "Groww",

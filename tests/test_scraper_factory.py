@@ -99,10 +99,18 @@ def test_greenhouse_scraper_navigates_via_page(mock_browser):
     assert isinstance(result, list)
 
 
-def test_lever_scraper_raises_not_implemented(mock_browser):
+def test_lever_scraper_navigates_via_api_then_html(mock_browser):
+    """LeverScraper is implemented — it tries the JSON API then falls back to HTML."""
     scraper = ScraperFactory.create(ATSType.LEVER, mock_browser)
-    with pytest.raises(NotImplementedError):
-        scraper.scrape("https://jobs.lever.co/example")
+    url = "https://jobs.lever.co/example"
+    # mock urllib path: API call will fail (no real network), so the scraper
+    # falls back to HTML, navigating via page.goto → returns an empty list.
+    result = scraper.scrape(url)
+    # HTML fallback is triggered; the browser page is navigated
+    mock_browser.page.goto.assert_called_once_with(
+        url, wait_until="domcontentloaded", timeout=25_000
+    )
+    assert isinstance(result, list)
 
 
 def test_scrapers_expose_platform_name(mock_browser):

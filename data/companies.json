@@ -114,7 +114,7 @@
   {
     "name": "Snowflake",
     "careers_url": "https://careers.snowflake.com/us/en",
-    "ats": "workday",
+    "ats": "unknown",
     "active": true,
     "priority": 1,
     "country": "US",
@@ -155,7 +155,7 @@
   },
   {
     "name": "Adobe",
-    "careers_url": "https://careers.adobe.com/us/en/search-results",
+    "careers_url": "https://adobe.wd5.myworkdayjobs.com/en-US/external_experienced",
     "ats": "workday",
     "active": true,
     "priority": 2,
@@ -253,7 +253,7 @@
   },
   {
     "name": "Walmart Global Tech",
-    "careers_url": "https://careers.walmart.com/technology",
+    "careers_url": "https://walmart.wd504.myworkdayjobs.com/en-US/WalmartExternal",
     "ats": "workday",
     "active": true,
     "priority": 2,

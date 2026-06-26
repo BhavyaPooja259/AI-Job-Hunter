@@ -24,6 +24,7 @@ from config.constants import ATSType
 from scrapers.base_scraper import BaseScraper
 from scrapers.greenhouse_scraper import GreenhouseScraper
 from scrapers.lever_scraper import LeverScraper
+from scrapers.workday_scraper import WorkdayScraper
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class ScraperFactory:
     _REGISTRY: dict[ATSType, type[BaseScraper]] = {
         ATSType.GREENHOUSE: GreenhouseScraper,
         ATSType.LEVER: LeverScraper,
+        ATSType.WORKDAY: WorkdayScraper,
     }
 
     @classmethod

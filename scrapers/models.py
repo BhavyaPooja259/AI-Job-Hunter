@@ -33,6 +33,8 @@ class Job(BaseModel):
 
     # Content
     description: Optional[str] = None
+    requirements: Optional[str] = None   # extracted requirements / qualifications section
+    department: Optional[str] = None     # team or business unit, when provided by the ATS
 
     # Metadata
     posted_date: Optional[date] = None

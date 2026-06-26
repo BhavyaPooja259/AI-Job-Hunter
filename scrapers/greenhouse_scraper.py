@@ -56,7 +56,12 @@ ships Layout D, we add one entry to `_LAYOUT_STRATEGIES` and ALL existing
 companies immediately benefit.
 """
 
+import html as _html_mod
+import json
 import logging
+import re
+import urllib.error
+import urllib.request
 from urllib.parse import urlparse, parse_qs
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -65,6 +70,13 @@ from browser import BrowserService
 from config.constants import ATSType
 from scrapers.base_scraper import BaseScraper
 from scrapers.models import Job
+
+_GH_API_BASE = "https://boards-api.greenhouse.io/v1/boards"
+_GH_API_TIMEOUT_S = 15
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,16 +129,124 @@ class GreenhouseScraper(BaseScraper):
         """
         Extract all job postings from a Greenhouse career page.
 
-        Works with classic (.opening), modern (.job-post), and embed/custom
-        layouts by probing each strategy in turn and using the first one that
-        succeeds.  Missing location or department fields are handled gracefully;
-        relative job URLs are resolved against the careers URL.
+        Preference order:
+          1. Greenhouse Job Board API (boards-api.greenhouse.io) with ?content=true
+             — returns all jobs with full descriptions in one HTTP request.
+             Available only when the careers URL is a standard Greenhouse-hosted board
+             (boards.greenhouse.io or job-boards.greenhouse.io).
+          2. Browser-based HTML scraping (multi-layout detection)
+             — used when the URL is a custom domain or the API is unavailable.
+             Returns jobs without descriptions.
 
-        Returns an empty list (never raises) if no Greenhouse layout is
-        detected on the page.
+        Returns an empty list (never raises) if no jobs are found.
         """
         self._logger.info("Scraping Greenhouse page: %s", careers_url)
+        company = _company_name_from_url(careers_url)
 
+        slug = _extract_greenhouse_slug(careers_url)
+        if slug:
+            result = self._try_greenhouse_api(slug, company)
+            if result is not None:
+                self._logger.info(
+                    "Greenhouse API succeeded for slug=%r — %d job(s) with descriptions",
+                    slug, len(result),
+                )
+                return result
+            self._logger.info(
+                "Greenhouse API unavailable for slug=%r — falling back to browser",
+                slug,
+            )
+
+        return self._scrape_browser(careers_url, company)
+
+    # ------------------------------------------------------------------
+    # Greenhouse Job Board API path
+    # ------------------------------------------------------------------
+
+    def _try_greenhouse_api(self, slug: str, company: str) -> list[Job] | None:
+        """
+        Call the Greenhouse Job Board API with content=true.
+
+        The Greenhouse Job Board API is a public, undocumented-but-stable
+        endpoint that Greenhouse provides for their hosted job boards.  With
+        ?content=true, each job includes the full HTML description.
+
+        Why this is better than browser scraping:
+          - One HTTP request returns all jobs with descriptions (vs. N browser
+            navigations for N jobs)
+          - Zero Playwright/Chromium overhead
+          - Structured JSON (no DOM parsing)
+
+        Returns:
+          list[Job]  — on success (empty if company has no openings)
+          None       — if the API is unreachable or returns an error
+        """
+        url = f"{_GH_API_BASE}/{slug}/jobs?content=true"
+        self._logger.info("Trying Greenhouse Job Board API: %s", url)
+
+        req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=_GH_API_TIMEOUT_S) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            self._logger.debug("Greenhouse API HTTP %d for slug=%r", exc.code, slug)
+            return None
+        except urllib.error.URLError as exc:
+            self._logger.debug("Greenhouse API network error for slug=%r: %s", slug, exc.reason)
+            return None
+        except Exception as exc:
+            self._logger.debug("Greenhouse API unexpected error for slug=%r: %s", slug, exc)
+            return None
+
+        job_list = data.get("jobs", [])
+        self._logger.info("Greenhouse API returned %d posting(s) for slug=%r", len(job_list), slug)
+
+        jobs: list[Job] = []
+        for posting in job_list:
+            job = self._parse_greenhouse_api_job(posting, company)
+            if job:
+                jobs.append(job)
+        return jobs
+
+    def _parse_greenhouse_api_job(self, posting: dict, company: str) -> Job | None:
+        """Parse one Greenhouse Job Board API posting into a Job."""
+        title = (posting.get("title") or "").strip()
+        if not title:
+            return None
+
+        job_url = (posting.get("absolute_url") or "").strip()
+        if not job_url:
+            return None
+
+        location = (posting.get("location") or {}).get("name") or None
+
+        raw_content = posting.get("content") or ""
+        description = _strip_html(raw_content) if raw_content else None
+
+        depts = posting.get("departments") or []
+        department = depts[0]["name"] if depts else None
+
+        return Job(
+            company=company,
+            title=title,
+            job_url=job_url,
+            location=location,
+            description=description,
+            department=department,
+            source_platform=ATSType.GREENHOUSE,
+        )
+
+    # ------------------------------------------------------------------
+    # Browser scraping path (original implementation)
+    # ------------------------------------------------------------------
+
+    def _scrape_browser(self, careers_url: str, company: str) -> list[Job]:
+        """
+        Multi-layout browser scraping — original Sprint 9 implementation.
+
+        Used when the Greenhouse API is unavailable or the URL is a
+        custom domain.  Returns jobs without descriptions.
+        """
         if not self._navigate(careers_url):
             return []
 
@@ -146,7 +266,6 @@ class GreenhouseScraper(BaseScraper):
             strategy["name"], len(containers),
         )
 
-        company = _company_name_from_url(careers_url)
         jobs: list[Job] = []
         skipped = 0
 
@@ -333,6 +452,52 @@ class GreenhouseScraper(BaseScraper):
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
+
+def _extract_greenhouse_slug(url: str) -> str | None:
+    """
+    Extract the Greenhouse job board slug from a URL.
+
+    Handles standard Greenhouse-hosted boards only.  Custom-domain boards
+    (e.g. ats.rippling.com) cannot be resolved to a slug without additional
+    configuration.
+
+    Examples:
+      https://boards.greenhouse.io/tekion               → "tekion"
+      https://boards.greenhouse.io/tekion/jobs          → "tekion"
+      https://job-boards.greenhouse.io/razorpay...      → "razorpay..."
+      https://boards.greenhouse.io/embed/job_board?for=X → "X"
+      https://ats.rippling.com/rippling/jobs            → None
+    """
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    params = parse_qs(parsed.query)
+    if "for" in params:
+        return params["for"][0]
+
+    if host in ("boards.greenhouse.io", "job-boards.greenhouse.io"):
+        skip = {"jobs", "embed", "job_board"}
+        parts = [p for p in parsed.path.split("/") if p and p not in skip]
+        return parts[0] if parts else None
+
+    return None
+
+
+def _strip_html(text: str) -> str:
+    """
+    Convert HTML-encoded Greenhouse job content to plain text.
+
+    The Greenhouse API returns content as HTML-entity-encoded strings
+    (e.g. &lt;p&gt; instead of <p>).  This function:
+      1. Decodes HTML entities (html.unescape)
+      2. Removes HTML tags via regex
+      3. Collapses whitespace
+    """
+    text = _html_mod.unescape(text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
 
 def _company_name_from_url(url: str) -> str:
     """

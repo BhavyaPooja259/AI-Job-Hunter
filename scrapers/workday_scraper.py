@@ -158,9 +158,25 @@ class WorkdayScraper(BaseScraper):
       2. *.myworkdayjobs.com HTML   — browser required, stable automation-id attrs
     """
 
-    def __init__(self, browser: BrowserService) -> None:
+    def __init__(
+        self,
+        browser: BrowserService,
+        max_descriptions: int = 0,
+    ) -> None:
+        """
+        Args:
+            browser:          BrowserService instance (always required by the
+                              base class; only used when the CXS API fails or
+                              when `max_descriptions > 0`).
+            max_descriptions: How many job detail pages to visit for description
+                              extraction.  Defaults to 0 (disabled) because each
+                              detail page navigation adds 5–15 seconds of browser
+                              time.  Set to a positive integer to enrich the
+                              first N jobs returned by the CXS API.
+        """
         super().__init__(browser)
         self.last_path: str = "unknown"
+        self._max_descriptions = max_descriptions
 
     @property
     def platform_name(self) -> str:
@@ -177,6 +193,10 @@ class WorkdayScraper(BaseScraper):
         Tries the CXS JSON API first if the URL is a *.myworkdayjobs.com
         domain.  Falls back to browser-based HTML scraping otherwise.
 
+        If `max_descriptions > 0`, navigates to each job's detail page (up
+        to that limit) to extract the full description.  The browser is
+        required for this step.
+
         Returns an empty list (never raises) if the page is inaccessible
         or produces no jobs.
         """
@@ -192,18 +212,25 @@ class WorkdayScraper(BaseScraper):
                     len(result), config.tenant, config.jobboard,
                 )
                 self.last_path = "api"
-                return result
-            self._logger.info(
-                "CXS API unavailable for %r — falling back to HTML", careers_url
-            )
+                jobs = result
+            else:
+                self._logger.info(
+                    "CXS API unavailable for %r — falling back to HTML", careers_url
+                )
+                self.last_path = "html"
+                jobs = self._scrape_html(careers_url, company, config)
         else:
             self._logger.info(
                 "URL is not a direct Workday domain — using HTML path directly: %s",
                 careers_url,
             )
+            self.last_path = "html"
+            jobs = self._scrape_html(careers_url, company, config)
 
-        self.last_path = "html"
-        return self._scrape_html(careers_url, company, config)
+        if self._max_descriptions > 0 and jobs:
+            jobs = self._enrich_descriptions(jobs)
+
+        return jobs
 
     # ------------------------------------------------------------------
     # CXS API path
@@ -383,6 +410,84 @@ class WorkdayScraper(BaseScraper):
 
         self._logger.info("HTML done — extracted: %d, skipped: %d", len(jobs), skipped)
         return jobs
+
+    # ------------------------------------------------------------------
+    # Description enrichment (optional, browser-based)
+    # ------------------------------------------------------------------
+
+    def _enrich_descriptions(self, jobs: list[Job]) -> list[Job]:
+        """
+        Navigate to each job's detail page and populate description.
+
+        Only the first `self._max_descriptions` jobs are enriched to cap
+        the time cost.  Navigation failures are logged and skipped — the
+        job is still returned without a description.
+
+        Performance note:
+          Each Workday detail page takes 5–15 seconds to load due to React
+          hydration.  For a full company scan (60 jobs), this adds 5–15
+          minutes.  In production, call with max_descriptions=5 to enrich
+          the top-5 jobs for the matcher, then fetch more on-demand when a
+          user opens a specific job in the UI.
+        """
+        limit = min(self._max_descriptions, len(jobs))
+        self._logger.info(
+            "Description enrichment: fetching detail pages for %d/%d job(s)",
+            limit, len(jobs),
+        )
+        enriched: list[Job] = []
+        for i, job in enumerate(jobs):
+            if i < limit:
+                description = self._fetch_job_description(job.job_url)
+                enriched.append(job.model_copy(update={"description": description}))
+            else:
+                enriched.append(job)
+        return enriched
+
+    def _fetch_job_description(self, job_url: str) -> str | None:
+        """
+        Navigate to a Workday job detail page and extract the description.
+
+        Workday job detail pages are React single-page applications.  The
+        description text is injected into the DOM under:
+          [data-automation-id="jobPostingDescription"]
+
+        This selector is stable across Workday versions because Workday uses
+        `data-automation-id` for QA automation hooks, which they commit to
+        keeping stable between releases.
+
+        Falls back to None if:
+          - Navigation times out
+          - The selector is not found within 15s
+          - The extracted text is empty
+        """
+        self._logger.info("Fetching description from: %s", job_url)
+        try:
+            self._browser.page.goto(
+                job_url, wait_until="domcontentloaded", timeout=25_000
+            )
+            self._browser.page.wait_for_timeout(5_000)
+            self._browser.page.wait_for_selector(
+                '[data-automation-id="jobPostingDescription"]', timeout=15_000
+            )
+            el = self._browser.page.query_selector(
+                '[data-automation-id="jobPostingDescription"]'
+            )
+            if not el:
+                return None
+            text = (el.inner_text() or "").strip()
+            self._logger.info(
+                "Description extracted (%d chars) from %s", len(text), job_url
+            )
+            return text if text else None
+        except PlaywrightTimeoutError:
+            self._logger.warning("Description timeout for %s", job_url)
+            return None
+        except Exception as exc:
+            self._logger.warning(
+                "Description fetch failed for %s: %s", job_url, exc
+            )
+            return None
 
     # ------------------------------------------------------------------
     # Helper extraction methods

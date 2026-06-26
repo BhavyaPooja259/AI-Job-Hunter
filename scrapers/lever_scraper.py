@@ -196,7 +196,21 @@ class LeverScraper(BaseScraper):
         return jobs
 
     def _parse_api_posting(self, posting: dict, company: str) -> Job | None:
-        """Parse one Lever API posting dict into a Job."""
+        """
+        Parse one Lever API posting dict into a Job.
+
+        Description fields available from the Lever API:
+          descriptionPlain  — main job description, plain text, no HTML
+          lists             — structured sections e.g. "What You'll Do",
+                              "What We're Looking For" — HTML content
+          additionalPlain   — boilerplate footer (EEO statements, legal text)
+
+        Strategy for requirements:
+          Scan `lists` for a section whose heading contains a
+          requirement-related keyword.  Use that section's content (stripped
+          of HTML) as `requirements`.  This gives a clean signal for the
+          matcher without mixing the full description with the EEO footer.
+        """
         title = (posting.get("text") or "").strip()
         if not title:
             return None
@@ -207,12 +221,19 @@ class LeverScraper(BaseScraper):
 
         cats = posting.get("categories") or {}
         location = self.extract_location_from_api(cats)
+        department = _extract_lever_department(cats)
+
+        description = (posting.get("descriptionPlain") or "").strip() or None
+        requirements = _extract_lever_requirements(posting.get("lists") or [])
 
         return Job(
             company=company,
             title=title,
             job_url=hosted_url,
             location=location,
+            description=description,
+            requirements=requirements,
+            department=department,
             source_platform=ATSType.LEVER,
         )
 
@@ -461,3 +482,59 @@ def _company_name_from_url(url: str) -> str:
     # Take first label before the TLD
     name = host.split(".")[0]
     return name.replace("-", " ").title()
+
+
+# ---------------------------------------------------------------------------
+# Description extraction helpers
+# ---------------------------------------------------------------------------
+
+_REQUIREMENTS_KEYWORDS = frozenset([
+    "require", "qualif", "looking for", "you'll need", "we need",
+    "what we're looking", "what you'll need", "must have",
+])
+
+
+def _extract_lever_requirements(lists: list[dict]) -> str | None:
+    """
+    Find the requirements / qualifications section from Lever API lists.
+
+    Lever postings are structured as a list of sections, each with a `text`
+    heading and `content` HTML body.  This function finds the first section
+    whose heading matches a requirements keyword, strips the HTML from its
+    content, and returns it as plain text.
+
+    Returns None if no requirements section is identified.
+    """
+    import html as _html_mod
+    import re
+
+    def strip(html_str: str) -> str:
+        text = _html_mod.unescape(html_str or "")
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
+    for section in lists:
+        heading = (section.get("text") or "").lower()
+        if any(kw in heading for kw in _REQUIREMENTS_KEYWORDS):
+            content = section.get("content") or ""
+            cleaned = strip(content)
+            if cleaned:
+                return cleaned
+
+    return None
+
+
+def _extract_lever_department(categories: dict) -> str | None:
+    """
+    Extract the department / team from Lever API categories.
+
+    Lever categories dict typically has both `team` (specific team name, e.g.
+    "R&D Engineering") and `department` (broader grouping, e.g. "Engineering").
+    We prefer `team` because it's more specific and useful for filtering.
+    """
+    team = (categories.get("team") or "").strip()
+    if team:
+        return team
+    dept = (categories.get("department") or "").strip()
+    return dept if dept else None

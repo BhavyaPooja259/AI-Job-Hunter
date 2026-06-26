@@ -288,11 +288,32 @@ def test_supported_companies_only_includes_registered_ats():
     assert all(c.ats in valid_ats for c in supported)
 
 
-def test_microsoft_not_in_supported_companies():
+def test_workday_companies_in_supported_companies():
+    """
+    Sprint 11 registered WorkdayScraper for ATSType.WORKDAY, so all four
+    Workday companies in the catalog are now scrapeable.
+
+    Snowflake is intentionally absent — its ATS was corrected from
+    'workday' to 'unknown' in Sprint 11.5 after inspection confirmed it
+    uses Phenom, not Workday.  Companies without a registered scraper
+    (Google, Netflix, Snowflake, PhonePe, Groww) must remain excluded.
+    """
     registry = CompanyRegistry()
     supported = registry.supported_companies()
     names = [c.name for c in supported]
-    assert "Microsoft" not in names  # Workday has no scraper yet
+
+    # Workday companies — scraper now registered
+    assert "Microsoft" in names
+    assert "Adobe" in names
+    assert "Visa" in names
+    assert "Walmart Global Tech" in names
+
+    # No scraper registered for these ATS platforms
+    assert "Google" not in names        # ats=unknown (custom ATS)
+    assert "Netflix" not in names       # ats=unknown (custom ATS)
+    assert "Snowflake" not in names     # ats=unknown (Phenom, not Workday)
+    assert "PhonePe" not in names       # ats=unknown
+    assert "Groww" not in names         # ats=unknown
 
 
 # ---------------------------------------------------------------------------

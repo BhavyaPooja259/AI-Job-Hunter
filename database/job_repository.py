@@ -38,16 +38,23 @@ CREATE TABLE IF NOT EXISTS jobs (
     source_platform TEXT NOT NULL,
     posted_date     TEXT,
     employment_type TEXT,
-    discovered_at   TEXT NOT NULL
+    discovered_at   TEXT NOT NULL,
+    description     TEXT,
+    requirements    TEXT,
+    department      TEXT
 )
 """
+
+# Columns added in Sprint 11.5 — appended to existing tables via _migrate_schema().
+_NEW_COLUMNS = ("description", "requirements", "department")
 
 _INSERT_SQL = """
 INSERT OR IGNORE INTO jobs
     (fingerprint, company, title, location, job_url,
-     source_platform, posted_date, employment_type, discovered_at)
+     source_platform, posted_date, employment_type, discovered_at,
+     description, requirements, department)
 VALUES
-    (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -92,6 +99,7 @@ class JobRepository:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE_SQL)
+        self._migrate_schema()
         self._conn.commit()
         logger.info("Database ready")
 
@@ -187,6 +195,24 @@ class JobRepository:
     # Internal helpers
     # -------------------------------------------------------------------------
 
+    def _migrate_schema(self) -> None:
+        """
+        Add columns introduced after the initial schema was created.
+
+        Uses PRAGMA table_info to check which columns already exist, then
+        ALTER TABLE for any that are missing.  Safe to run on both fresh
+        databases (all columns present from _CREATE_TABLE_SQL) and old ones
+        (only the original nine columns exist).  Idempotent.
+        """
+        existing = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(jobs)").fetchall()
+        }
+        for col in _NEW_COLUMNS:
+            if col not in existing:
+                self._conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT")
+                logger.info("Migration: added column '%s' to jobs table", col)
+
     def _require_open(self) -> None:
         if self._conn is None:
             raise RuntimeError(
@@ -212,10 +238,14 @@ def _job_to_row(job: Job) -> tuple:
         job.posted_date.isoformat() if job.posted_date else None,
         job.employment_type,
         job.discovered_at.isoformat(),
+        job.description,
+        job.requirements,
+        job.department,
     )
 
 
 def _row_to_job(row: sqlite3.Row) -> Job:
+    keys = row.keys()
     return Job(
         company=row["company"],
         title=row["title"],
@@ -225,4 +255,7 @@ def _row_to_job(row: sqlite3.Row) -> Job:
         posted_date=date.fromisoformat(row["posted_date"]) if row["posted_date"] else None,
         employment_type=row["employment_type"],
         discovered_at=datetime.fromisoformat(row["discovered_at"]),
+        description=row["description"] if "description" in keys else None,
+        requirements=row["requirements"] if "requirements" in keys else None,
+        department=row["department"] if "department" in keys else None,
     )

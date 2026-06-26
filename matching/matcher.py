@@ -256,8 +256,32 @@ class JobMatcher:
     # -------------------------------------------------------------------------
 
     def _job_text(self, job: Job) -> str:
-        """Combine all searchable text from a job into one lowercase string."""
-        parts = [job.title, job.description or "", job.location or ""]
+        """
+        Combine all searchable text from a job into one lowercase string.
+
+        Why descriptions improve matching quality
+        -----------------------------------------
+        The job title alone rarely specifies technologies.  "Software Engineer II"
+        looks the same whether the stack is Java + Spring Boot or Go + gRPC.
+        Descriptions and requirements sections contain explicit skill callouts
+        ("5+ years of Java", "experience with Spring Boot and Kafka") that the
+        rule scorer can match against directly.
+
+        Including `requirements` separately from `description` matters because
+        some ATS platforms (Lever) separate the "what you'll do" narrative
+        (description) from the "what we need" checklist (requirements).
+        Concatenating both ensures skills mentioned in either section score.
+
+        The location field is included so location-bearing terms like "Remote"
+        appear in the combined text (though the dedicated location scorer is
+        the primary mechanism for location fit).
+        """
+        parts = [
+            job.title,
+            job.description or "",
+            job.requirements or "",
+            job.location or "",
+        ]
         return " ".join(parts).lower()
 
     def _missing_key_skills(self, text: str) -> list[str]:

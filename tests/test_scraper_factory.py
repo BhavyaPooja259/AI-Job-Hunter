@@ -86,12 +86,17 @@ def test_factory_runtime_registration(mock_browser):
 # ---------------------------------------------------------------------------
 
 def test_greenhouse_scraper_navigates_via_page(mock_browser):
-    """GreenhouseScraper navigates with page.goto (domcontentloaded, not networkidle)."""
+    """
+    GreenhouseScraper falls back to browser for custom-domain Greenhouse boards.
+
+    The scraper now tries the Greenhouse Job Board API first for standard
+    boards.greenhouse.io URLs (slug is extractable).  For custom-domain boards
+    (ats.<company>.com) no slug can be extracted, so the browser path is always
+    taken — this is what the mock verifies.
+    """
     scraper = ScraperFactory.create(ATSType.GREENHOUSE, mock_browser)
-    url = "https://boards.greenhouse.io/example"
-    # mock page.goto / wait_for_selector / query_selector_all all return MagicMock;
-    # the layout detection succeeds (no PlaywrightTimeoutError raised by mock),
-    # the container loop iterates over an empty MagicMock iterator → [] returned.
+    # Custom domain → no slug extractable → API path skipped → browser always used
+    url = "https://ats.example-company.com/careers/jobs"
     result = scraper.scrape(url)
     mock_browser.page.goto.assert_called_once_with(
         url, wait_until="domcontentloaded", timeout=25_000

@@ -12,6 +12,7 @@ from agents.resume_tailoring_agent import ResumeTailoringAgent, TailoringResult
 from agents.notification_agent import NotificationAgent, NotificationResult
 from agents.application_agent import ApplicationAgent, ApplicationStats
 from agents.cover_letter_agent import CoverLetterAgent
+from agents.referral_agent import ReferralAgent, ReferralStats
 
 __all__ = [
     "ScoutAgent",
@@ -20,4 +21,5 @@ __all__ = [
     "NotificationAgent", "NotificationResult",
     "ApplicationAgent", "ApplicationStats",
     "CoverLetterAgent",
+    "ReferralAgent", "ReferralStats",
 ]

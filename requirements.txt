@@ -12,3 +12,6 @@ playwright>=1.44.0
 
 # AI Provider
 anthropic>=0.25.0
+
+# Testing
+pytest>=8.0

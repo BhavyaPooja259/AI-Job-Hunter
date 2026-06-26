@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Rippling",
+    "ats": "greenhouse",
+    "careers_url": "https://ats.rippling.com/rippling/jobs",
+    "priority": 1,
+    "active": true,
+    "notes": "Fast-growing HR/fintech platform. Strong backend and platform eng teams."
+  },
+  {
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "careers_url": "https://stripe.com/jobs/search",
+    "priority": 1,
+    "active": true,
+    "notes": "Top-tier fintech. Known for high engineering bar and strong Java/backend culture."
+  },
+  {
+    "name": "Microsoft",
+    "ats": "workday",
+    "careers_url": "https://careers.microsoft.com/us/en/search-results",
+    "priority": 2,
+    "active": true,
+    "notes": "Large org — filter by Azure and platform teams for best backend fit."
+  },
+  {
+    "name": "Databricks",
+    "ats": "greenhouse",
+    "careers_url": "https://www.databricks.com/company/careers/open-positions",
+    "priority": 1,
+    "active": true,
+    "notes": "High-growth data/AI platform. Platform and infra engineering roles are a strong match."
+  },
+  {
+    "name": "Uber",
+    "ats": "greenhouse",
+    "careers_url": "https://www.uber.com/us/en/careers/list/",
+    "priority": 1,
+    "active": true,
+    "notes": "Excellent backend and platform engineering culture. Known for large-scale distributed systems."
+  }
+]

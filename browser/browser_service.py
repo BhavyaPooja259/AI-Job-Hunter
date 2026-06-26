@@ -155,6 +155,21 @@ class BrowserService:
         self._cleanup()
         logger.info("Browser closed")
 
+    @property
+    def page(self) -> "Page":
+        """
+        The active Playwright Page object.
+
+        Scrapers use this to call query_selector, locator, wait_for_selector,
+        and other Playwright APIs directly — without re-implementing them in
+        BrowserService. BrowserService manages the lifecycle; scrapers use the page.
+
+        Raises:
+            RuntimeError: if start() has not been called
+        """
+        self._require_started()
+        return self._page
+
     # -------------------------------------------------------------------------
     # Context manager support
     # -------------------------------------------------------------------------

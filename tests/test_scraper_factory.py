@@ -85,10 +85,14 @@ def test_factory_runtime_registration(mock_browser):
 # Scraper interface tests
 # ---------------------------------------------------------------------------
 
-def test_greenhouse_scraper_raises_not_implemented(mock_browser):
+def test_greenhouse_scraper_calls_browser_open(mock_browser):
+    """GreenhouseScraper is implemented — verify it navigates via the browser."""
     scraper = ScraperFactory.create(ATSType.GREENHOUSE, mock_browser)
-    with pytest.raises(NotImplementedError):
-        scraper.scrape("https://boards.greenhouse.io/example")
+    # mock page.query_selector_all returns a MagicMock whose len() is 0,
+    # so the loop body never runs and scrape() returns an empty list cleanly.
+    result = scraper.scrape("https://boards.greenhouse.io/example")
+    mock_browser.open.assert_called_once_with("https://boards.greenhouse.io/example")
+    assert isinstance(result, list)
 
 
 def test_lever_scraper_raises_not_implemented(mock_browser):

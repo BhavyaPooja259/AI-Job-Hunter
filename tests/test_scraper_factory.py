@@ -85,13 +85,17 @@ def test_factory_runtime_registration(mock_browser):
 # Scraper interface tests
 # ---------------------------------------------------------------------------
 
-def test_greenhouse_scraper_calls_browser_open(mock_browser):
-    """GreenhouseScraper is implemented — verify it navigates via the browser."""
+def test_greenhouse_scraper_navigates_via_page(mock_browser):
+    """GreenhouseScraper navigates with page.goto (domcontentloaded, not networkidle)."""
     scraper = ScraperFactory.create(ATSType.GREENHOUSE, mock_browser)
-    # mock page.query_selector_all returns a MagicMock whose len() is 0,
-    # so the loop body never runs and scrape() returns an empty list cleanly.
-    result = scraper.scrape("https://boards.greenhouse.io/example")
-    mock_browser.open.assert_called_once_with("https://boards.greenhouse.io/example")
+    url = "https://boards.greenhouse.io/example"
+    # mock page.goto / wait_for_selector / query_selector_all all return MagicMock;
+    # the layout detection succeeds (no PlaywrightTimeoutError raised by mock),
+    # the container loop iterates over an empty MagicMock iterator → [] returned.
+    result = scraper.scrape(url)
+    mock_browser.page.goto.assert_called_once_with(
+        url, wait_until="domcontentloaded", timeout=25_000
+    )
     assert isinstance(result, list)
 
 

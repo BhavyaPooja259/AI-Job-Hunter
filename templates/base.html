@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AI Job Hunter{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">AI Job Hunter</a>
+    <a href="/"            {% if active_page == 'home'         %}class="active"{% endif %}>Home</a>
+    <a href="/jobs"        {% if active_page == 'jobs'         %}class="active"{% endif %}>Jobs</a>
+    <a href="/applications"{% if active_page == 'applications' %}class="active"{% endif %}>Applications</a>
+    <a href="/stats"       {% if active_page == 'stats'        %}class="active"{% endif %}>Stats</a>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>AI Job Hunter &mdash; Sprint 16</footer>
+</body>
+</html>

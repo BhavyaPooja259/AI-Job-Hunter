@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Jobs — AI Job Hunter{% endblock %}
+
+{% block content %}
+<h1>All Jobs <span class="count-badge">{{ total }}</span></h1>
+
+{% if jobs %}
+<table>
+  <thead>
+    <tr>
+      <th>Score</th>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Location</th>
+      <th>Platform</th>
+      <th>Skills Matched</th>
+      <th>Missing Skills</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dj in jobs %}
+    <tr>
+      <td>
+        <span class="score {% if dj.score >= score_threshold %}score-high{% elif dj.score >= 40 %}score-mid{% else %}score-low{% endif %}">
+          {{ dj.score }}
+        </span>
+      </td>
+      <td><a href="{{ dj.job.job_url }}" target="_blank" rel="noopener">{{ dj.job.title }}</a></td>
+      <td>{{ dj.job.company }}</td>
+      <td>{{ dj.job.location or "Remote?" }}</td>
+      <td>{{ dj.job.source_platform.value }}</td>
+      <td>{{ dj.matched_skills[:3] | join(", ") or "—" }}</td>
+      <td>{{ dj.missing_skills[:3] | join(", ") or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No jobs found. Run the Scout Agent to discover jobs from your target companies.</p>
+{% endif %}
+{% endblock %}

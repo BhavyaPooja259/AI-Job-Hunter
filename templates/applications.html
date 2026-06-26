@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Applications — AI Job Hunter{% endblock %}
+
+{% block content %}
+<h1>Applications <span class="count-badge">{{ app_stats.total }}</span></h1>
+
+<!-- Summary cards -->
+<div class="cards">
+  <div class="card">
+    <div class="label">Total</div>
+    <div class="value">{{ app_stats.total }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Active</div>
+    <div class="value">{{ app_stats.active_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Applied</div>
+    <div class="value">{{ app_stats.applied_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Offers</div>
+    <div class="value">{{ app_stats.offer_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Rejection Rate</div>
+    <div class="value">{{ "%.0f%%"|format(app_stats.rejection_rate * 100) }}</div>
+  </div>
+</div>
+
+{% if applications %}
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Status</th>
+      <th>Applied</th>
+      <th>Last Updated</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for app in applications %}
+    <tr>
+      <td><a href="{{ app.job_url }}" target="_blank" rel="noopener">{{ app.title }}</a></td>
+      <td>{{ app.company }}</td>
+      <td><span class="badge badge-{{ app.status.value }}">{{ app.status.value.replace("_", " ") }}</span></td>
+      <td>{{ app.applied_at.strftime("%b %d, %Y") if app.applied_at else "—" }}</td>
+      <td>{{ app.updated_at.strftime("%b %d, %Y") }}</td>
+      <td class="notes-cell">{{ app.notes or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No applications tracked yet. Use ApplicationAgent.track(job) to start tracking.</p>
+{% endif %}
+{% endblock %}

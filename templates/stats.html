@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Stats — AI Job Hunter{% endblock %}
+
+{% block content %}
+<h1>Statistics</h1>
+
+<!-- Top-level cards -->
+<div class="cards">
+  <div class="card">
+    <div class="label">Jobs Discovered</div>
+    <div class="value">{{ total_jobs }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Applications</div>
+    <div class="value">{{ app_stats.total }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Active</div>
+    <div class="value">{{ app_stats.active_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Offers</div>
+    <div class="value">{{ app_stats.offer_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Rejection Rate</div>
+    <div class="value">{{ "%.0f%%"|format(app_stats.rejection_rate * 100) }}</div>
+  </div>
+</div>
+
+<!-- Application funnel -->
+<div class="section-title">Application Funnel</div>
+{% if breakdown %}
+<table>
+  <thead>
+    <tr>
+      <th>Status</th>
+      <th>Count</th>
+      <th>Share</th>
+      <th>Visual</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for status_value, count in breakdown %}
+    <tr>
+      <td><span class="badge badge-{{ status_value }}">{{ status_value.replace("_", " ") }}</span></td>
+      <td>{{ count }}</td>
+      <td>{{ "%.0f%%"|format((count / app_stats.total * 100) if app_stats.total > 0 else 0) }}</td>
+      <td>
+        <div class="bar-bg">
+          <div class="bar-fill" style="width: {{ (count / app_stats.total * 100)|int if app_stats.total > 0 else 0 }}%"></div>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No applications yet. Stats will appear once you start tracking applications.</p>
+{% endif %}
+
+<!-- Summary text -->
+{% if app_stats.total > 0 %}
+<p class="stats-summary">{{ app_stats.summary() }}</p>
+{% endif %}
+{% endblock %}

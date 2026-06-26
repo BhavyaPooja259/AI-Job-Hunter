@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Home — AI Job Hunter{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- Summary cards -->
+<div class="cards">
+  <div class="card">
+    <div class="label">Total Jobs</div>
+    <div class="value">{{ total_jobs }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Applications</div>
+    <div class="value">{{ app_stats.total }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Active</div>
+    <div class="value">{{ app_stats.active_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Offers</div>
+    <div class="value">{{ app_stats.offer_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Rejection Rate</div>
+    <div class="value">{{ "%.0f%%"|format(app_stats.rejection_rate * 100) }}</div>
+  </div>
+</div>
+
+<!-- Top matched jobs -->
+<div class="section-title">Top Matched Jobs</div>
+{% if top_jobs %}
+<table>
+  <thead>
+    <tr>
+      <th>Score</th>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Location</th>
+      <th>Skills Matched</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dj in top_jobs %}
+    <tr>
+      <td>
+        <span class="score {% if dj.score >= 75 %}score-high{% elif dj.score >= 50 %}score-mid{% else %}score-low{% endif %}">
+          {{ dj.score }}
+        </span>
+      </td>
+      <td><a href="{{ dj.job.job_url }}" target="_blank" rel="noopener">{{ dj.job.title }}</a></td>
+      <td>{{ dj.job.company }}</td>
+      <td>{{ dj.job.location or "Remote?" }}</td>
+      <td>{{ dj.matched_skills[:3] | join(", ") or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No jobs found. Run the Scout Agent to discover jobs.</p>
+{% endif %}
+
+<!-- Recent applications -->
+<div class="section-title">Recent Applications</div>
+{% if recent_applications %}
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Status</th>
+      <th>Applied</th>
+      <th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for app in recent_applications %}
+    <tr>
+      <td>{{ app.title }}</td>
+      <td>{{ app.company }}</td>
+      <td><span class="badge badge-{{ app.status.value }}">{{ app.status.value.replace("_", " ") }}</span></td>
+      <td>{{ app.applied_at.strftime("%b %d, %Y") if app.applied_at else "—" }}</td>
+      <td>{{ app.updated_at.strftime("%b %d") }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No applications tracked yet. Use the Application Tracker to start tracking.</p>
+{% endif %}
+{% endblock %}

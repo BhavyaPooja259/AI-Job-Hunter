@@ -1,0 +1,242 @@
+/* ============================================================
+   AI Job Hunter — Dashboard Styles
+   ============================================================ */
+
+/* Reset + base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f4f8;
+  color: #1a202c;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---- Navigation ---- */
+nav {
+  background: #1e3a5f;
+  padding: .85rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+}
+
+nav .brand {
+  color: #ffffff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -.01em;
+  margin-right: .5rem;
+}
+
+nav a {
+  color: #a8c0e0;
+  text-decoration: none;
+  font-size: .875rem;
+  font-weight: 500;
+  transition: color .15s;
+}
+
+nav a:hover { color: #ffffff; }
+nav a.active { color: #ffffff; border-bottom: 2px solid #4fa3e0; padding-bottom: 2px; }
+
+/* ---- Layout ---- */
+.container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.count-badge {
+  background: #1e3a5f;
+  color: #fff;
+  font-size: .85rem;
+  font-weight: 600;
+  padding: .15rem .65rem;
+  border-radius: 12px;
+  vertical-align: middle;
+}
+
+/* ---- Summary cards ---- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  border: 1px solid #e2e8f0;
+}
+
+.card .label {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #718096;
+  font-weight: 600;
+}
+
+.card .value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-top: .3rem;
+  line-height: 1.1;
+}
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  border: 1px solid #e2e8f0;
+  margin-bottom: 2rem;
+  font-size: .875rem;
+}
+
+thead {
+  background: #1e3a5f;
+  color: #ffffff;
+}
+
+th {
+  text-align: left;
+  padding: .75rem 1rem;
+  font-size: .72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+
+td {
+  padding: .65rem 1rem;
+  border-bottom: 1px solid #f0f4f8;
+  vertical-align: middle;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #f7fafc; }
+
+.notes-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #718096;
+  font-size: .8rem;
+}
+
+/* ---- Section titles ---- */
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin: 1.75rem 0 .75rem;
+  padding-bottom: .4rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* ---- Links ---- */
+a { color: #2b6cb0; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---- Score display ---- */
+.score {
+  display: inline-block;
+  font-weight: 700;
+  font-size: .9rem;
+  min-width: 2.5rem;
+  text-align: center;
+}
+.score-high { color: #276749; }
+.score-mid  { color: #c05621; }
+.score-low  { color: #718096; }
+
+/* ---- Status badges ---- */
+.badge {
+  display: inline-block;
+  padding: .2rem .65rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+
+.badge-SAVED              { background: #edf2f7; color: #4a5568; }
+.badge-READY_TO_APPLY     { background: #ebf8ff; color: #2b6cb0; }
+.badge-APPLIED            { background: #e0f7fa; color: #00695c; }
+.badge-ONLINE_ASSESSMENT  { background: #f3e8ff; color: #6b21a8; }
+.badge-PHONE_SCREEN       { background: #fff7ed; color: #9a3412; }
+.badge-INTERVIEW          { background: #fffbeb; color: #92400e; }
+.badge-OFFER              { background: #f0fff4; color: #276749; }
+.badge-REJECTED           { background: #fff5f5; color: #9b2c2c; }
+.badge-WITHDRAWN          { background: #f7fafc; color: #4a5568; }
+
+/* ---- Funnel bar ---- */
+.bar-bg {
+  background: #e2e8f0;
+  border-radius: 4px;
+  height: 10px;
+  min-width: 100px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  background: #2b6cb0;
+  height: 100%;
+  border-radius: 4px;
+  transition: width .3s ease;
+}
+
+/* ---- Empty state ---- */
+.empty {
+  text-align: center;
+  padding: 3.5rem 2rem;
+  color: #a0aec0;
+  font-style: italic;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 2rem;
+}
+
+/* ---- Stats summary line ---- */
+.stats-summary {
+  color: #4a5568;
+  font-size: .875rem;
+  margin-top: .5rem;
+  font-style: italic;
+}
+
+/* ---- Footer ---- */
+footer {
+  text-align: center;
+  padding: 1.5rem;
+  color: #a0aec0;
+  font-size: .8rem;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 2rem;
+}

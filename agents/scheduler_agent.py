@@ -52,6 +52,7 @@ from scheduler.workflow import WorkflowResult
 if TYPE_CHECKING:
     from agents.notification_agent import NotificationAgent
     from agents.scout_agent import ScoutAgent
+    from ai.provider import AIProvider
     from database.job_repository import JobRepository
     from google import genai
     from referral.referral_repository import ReferralRepository
@@ -86,6 +87,7 @@ class SchedulerAgent:
         notification_agent: "NotificationAgent",
         referral_repo: "ReferralRepository | None" = None,
         client: "genai.Client | None" = None,
+        provider: "AIProvider | None" = None,
     ) -> None:
         self._runner = JobRunner(
             job_repo=job_repo,
@@ -93,6 +95,7 @@ class SchedulerAgent:
             notification_agent=notification_agent,
             referral_repo=referral_repo,
             client=client,
+            provider=provider,
         )
 
     def run(self, config: SchedulerConfig | None = None) -> WorkflowResult:

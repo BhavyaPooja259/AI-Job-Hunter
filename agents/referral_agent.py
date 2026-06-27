@@ -37,6 +37,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ai.provider import AIProvider
 from referral.referral import Referral, ReferralMessageData, ReferralMessages
 from referral.referral_repository import ReferralRepository
 from referral.referral_status import (
@@ -105,17 +106,26 @@ class ReferralAgent:
         self,
         repo: ReferralRepository,
         client: "genai.Client | None" = None,
+        provider: "AIProvider | None" = None,
         candidate_name: str = "",
         candidate_title: str = "Software Engineer II",
         candidate_email: str = "",
         model: str = "gemini-2.0-flash",
     ) -> None:
         self._repo = repo
-        self._client = client
         self._candidate_name = candidate_name
         self._candidate_title = candidate_title
         self._candidate_email = candidate_email
         self._model = model
+
+        # Resolve provider: explicit provider > client wrapper > None (template mode)
+        if provider is not None:
+            self._provider: AIProvider | None = provider
+        elif client is not None:
+            from ai.gemini_provider import GeminiProvider
+            self._provider = GeminiProvider(client=client, model=model)
+        else:
+            self._provider = None
 
     # ------------------------------------------------------------------ #
     # Contact management
@@ -292,7 +302,7 @@ class ReferralAgent:
             "generating messages for %s @ %s", referral.contact_name, referral.company
         )
 
-        if self._client is not None:
+        if self._provider is not None:
             messages = self._generate_with_ai(referral)
         else:
             messages = self._generate_from_templates(referral)
@@ -307,32 +317,17 @@ class ReferralAgent:
     # ------------------------------------------------------------------ #
 
     def _generate_with_ai(self, referral: Referral) -> ReferralMessages:
-        """Call Gemini to produce personalised messages, fallback on any error."""
-        from google.genai import types
-
+        """Use the configured AIProvider to produce personalised messages, fallback on error."""
         system = self._build_system_prompt()
         user_msg = self._build_user_message(referral)
 
         try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=user_msg,
-                config=types.GenerateContentConfig(
-                    system_instruction=system,
-                    response_mime_type="application/json",
-                    response_schema=ReferralMessageData,
-                    max_output_tokens=800,
-                ),
+            text = self._provider.complete(  # type: ignore[union-attr]
+                user_message=user_msg,
+                system_prompt=system,
+                response_schema=ReferralMessageData,
+                max_tokens=800,
             )
-
-            text = getattr(response, "text", None)
-            if not text:
-                logger.warning(
-                    "empty Gemini response for %s @ %s — falling back to templates",
-                    referral.contact_name, referral.company,
-                )
-                return self._generate_from_templates(referral)
-
             data = ReferralMessageData.model_validate_json(text)
             return ReferralMessages(
                 linkedin_request=data.linkedin_request,

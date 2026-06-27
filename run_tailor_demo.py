@@ -39,8 +39,7 @@ logging.basicConfig(
 for ns in ("agents", "matching", "scrapers", "database"):
     logging.getLogger(ns).setLevel(logging.INFO)
 
-from google import genai
-
+from ai.factory import create_provider
 from config import settings
 from database.job_repository import JobRepository
 from matching.matcher import JobMatcher
@@ -135,13 +134,17 @@ def main() -> None:
     print("  Resume Tailoring Demo — Adobe × Bhavya L")
     print(BANNER)
 
-    # ── verify API key up front ───────────────────────────────────────────────
-    if not settings.gemini_api_key:
+    # ── resolve AI provider ───────────────────────────────────────────────────
+    provider = create_provider()
+    if provider is None:
         print()
-        print("ERROR: GEMINI_API_KEY is not set.")
-        print("Add it to your .env file or export it in your shell:")
-        print("  export GEMINI_API_KEY=AIza…")
+        print("ERROR: No AI provider is configured.")
+        print("Set one of the following in .env:")
+        print("  GEMINI_API_KEY=AIza…")
+        print("  OPENROUTER_API_KEY=sk-or-…   (+ AI_PROVIDER=openrouter)")
+        print("  GROQ_API_KEY=gsk_…           (+ AI_PROVIDER=groq)")
         sys.exit(1)
+    print(f"  Provider : {provider.name}")
 
     # ── step 1: jobs ─────────────────────────────────────────────────────────
     print()
@@ -164,12 +167,11 @@ def main() -> None:
 
     # ── step 3: tailor ───────────────────────────────────────────────────────
     print()
-    print("[ 3/3 ]  Calling ResumeTailoringAgent (Gemini)")
+    print(f"[ 3/3 ]  Calling ResumeTailoringAgent ({provider.name})")
     print("-" * 40)
-    print("  Sending resume + job to Gemini … (may take 10–20 s)")
+    print(f"  Sending resume + job to {provider.name} … (may take 10–20 s)")
 
-    client = genai.Client(api_key=settings.gemini_api_key)
-    agent = ResumeTailoringAgent(client=client)
+    agent = ResumeTailoringAgent(provider=provider)
 
     result = agent.tailor(job, rule_result=rule_result)
 

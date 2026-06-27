@@ -41,6 +41,7 @@ from scheduler.workflow import StepResult, WorkflowResult, WorkflowStep
 if TYPE_CHECKING:
     from agents.notification_agent import NotificationAgent
     from agents.scout_agent import ScoutAgent
+    from ai.provider import AIProvider
     from database.job_repository import JobRepository
     from google import genai
     from referral.referral_repository import ReferralRepository
@@ -77,12 +78,14 @@ class JobRunner:
         notification_agent: "NotificationAgent",
         referral_repo: "ReferralRepository | None" = None,
         client: "genai.Client | None" = None,
+        provider: "AIProvider | None" = None,
     ) -> None:
         self._job_repo = job_repo
         self._scout_agent = scout_agent
         self._notification_agent = notification_agent
         self._referral_repo = referral_repo
         self._client = client
+        self._provider = provider
 
     # ------------------------------------------------------------------ #
     # Public interface
@@ -301,7 +304,7 @@ class JobRunner:
         """
         t0 = time.monotonic()
 
-        if self._client is None:
+        if self._client is None and self._provider is None:
             return StepResult(
                 step=WorkflowStep.TAILOR,
                 success=True,
@@ -332,6 +335,7 @@ class JobRunner:
 
         agent = ResumeTailoringAgent(
             client=self._client,
+            provider=self._provider,
             resume_text=config.resume_text,
         )
 
@@ -377,6 +381,7 @@ class JobRunner:
         agent = CoverLetterAgent(
             resume_text=config.resume_text,
             client=self._client,
+            provider=self._provider,
             candidate_name=config.candidate_name,
             candidate_email=config.candidate_email,
         )

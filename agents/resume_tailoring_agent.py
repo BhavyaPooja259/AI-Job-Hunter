@@ -60,16 +60,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from google import genai
-from google.genai import types
-
+from ai.provider import AIProvider
 from matching.ai_result import AIMatchResult
 from matching.matcher import MatchResult
 from matching.tailor_result import ExperienceEntry, TailoredResumeData
 from scrapers.models import Job
 
 if TYPE_CHECKING:
-    pass
+    from google import genai
 
 logger = logging.getLogger(__name__)
 
@@ -135,47 +133,52 @@ class ResumeTailoringAgent:
 
     def __init__(
         self,
-        client: genai.Client,
+        client: "genai.Client | None" = None,
+        provider: "AIProvider | None" = None,
         resume_pdf_path: Path = _DEFAULT_RESUME_PATH,
         resume_text: str | None = None,
         output_dir: Path = _DEFAULT_OUTPUT_DIR,
         model: str = "gemini-2.0-flash",
         max_tokens: int = 3000,
-        max_description_chars: int = 4000,
+        max_description_chars: int = 2000,
     ) -> None:
         """
         Parameters
         ----------
         client
-            Initialised genai.Client() instance.
-
+            Initialised google.genai.Client.  Takes precedence over provider
+            when both are given.  Either client or provider must be supplied.
+        provider
+            Any AIProvider implementation.  Used when client is None.
         resume_pdf_path
             Path to the candidate's resume PDF.  Ignored when resume_text
-            is provided.  Defaults to resume/bhavya-resume.pdf relative to
-            the project root.
-
+            is provided.  Defaults to resume/bhavya-resume.pdf.
         resume_text
-            Pass the resume content directly as a string to bypass PDF
-            extraction.  Useful for testing and for cases where the PDF
-            extraction result is known to be good.
-
+            Pass resume content directly to bypass PDF extraction.
         output_dir
-            Directory where tailored resumes are saved.  Created automatically
-            if it does not exist.  Defaults to resume/tailored/.
-
+            Directory where tailored resumes are saved.
         model
-            Gemini model to use.  Defaults to gemini-2.0-flash.
-
+            Model ID forwarded to GeminiProvider when wrapping a raw client.
         max_tokens
-            Token budget for Gemini's response.  3000 is sufficient for a
-            full resume with structured metadata.  Increase if summaries or
-            bullet points are being truncated.
-
+            Token budget per AI response.  3000 is safe for free-tier models
+            because schema-injection stripping (see _maybe_strip_schema in
+            the HTTP providers) keeps the total context well within 8192
+            tokens even for real-world resumes (3600-char PDF) combined with
+            full job descriptions.
         max_description_chars
-            Truncate long job descriptions before sending to Gemini.  Caps
-            token spend on unusually verbose job postings.
+            Truncate long job descriptions before sending to the provider.
         """
-        self._client = client
+        # Resolve provider: explicit provider > client wrapper > error
+        if provider is not None:
+            self._provider: AIProvider = provider
+        elif client is not None:
+            from ai.gemini_provider import GeminiProvider
+            self._provider = GeminiProvider(client=client, model=model)
+        else:
+            raise ValueError(
+                "ResumeTailoringAgent requires either 'client' or 'provider'"
+            )
+
         self._output_dir = output_dir
         self._model = model
         self._max_tokens = max_tokens
@@ -228,24 +231,12 @@ class ResumeTailoringAgent:
         user_msg = self._build_user_message(job, ai_result, rule_result)
 
         try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=user_msg,
-                config=types.GenerateContentConfig(
-                    system_instruction=system,
-                    response_mime_type="application/json",
-                    response_schema=TailoredResumeData,
-                    max_output_tokens=self._max_tokens,
-                ),
+            text = self._provider.complete(
+                user_message=user_msg,
+                system_prompt=system,
+                response_schema=TailoredResumeData,
+                max_tokens=self._max_tokens,
             )
-
-            text = getattr(response, "text", None)
-            if not text:
-                logger.warning(
-                    "empty Gemini response for %s @ %s", job.title, job.company
-                )
-                return None
-
             data = TailoredResumeData.model_validate_json(text)
             logger.info(
                 "tailored %s @ %s — ATS estimate %d%%, %d keywords",

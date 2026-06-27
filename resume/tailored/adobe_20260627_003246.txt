@@ -1,0 +1,67 @@
+BHAVYA L
+bhavya2592001@gmail.com | +91 9150313881
+
+SUMMARY
+Software Engineer with 3+ years of experience delivering scalable B2B solutions, optimized database performance, and built metadata‑driven platforms for rapid personalization of digital experiences. Proficient in Java, RESTful services, SQL, and AWS cloud deployments, with a strong focus on Agile delivery, automated testing, and continuous integration.
+
+TECHNICAL SKILLS
+Java
+REST APIs
+SQL (MySQL, PostgreSQL)
+AWS (EC2, S3)
+Redis
+Microservices
+CI/CD
+Spring Boot
+React JS
+JUnit
+Mockito
+Git
+Maven
+Data Structures & Algorithms
+OOP
+LLD
+API Design
+Design Patterns
+Distributed Systems
+
+EXPERIENCE
+Zoho
+Member Technical Staff
+June 2023–June 2026
+- Developed a metadata‑driven no‑code platform with configurable UI components, enabling rapid personalization of customer interfaces and accelerating feature delivery for BFSI clients.
+- Optimized database performance, reducing repeated queries by 60%, resulting in faster processing times, lower latency, and improved system responsiveness.
+- Architected reusable and configurable platform components, improving maintainability, scalability, and flexibility for future feature development.
+
+Zoho
+Project Trainee
+Oct 2022 – May 2023
+- Automated scheduling feature integrating workflow automation and reminders (email, call, meeting), streamlining task management and boosting CRM operational efficiency.
+- Engineered a customer data validation workflow that improved record accuracy and enhanced operational decision‑making.
+
+Amazon
+SDE Intern
+Jul 2022 — Sep 2022
+- Developed CSV to CBE Converter using batch processing, automating large dataset transformation into CBE format, reducing data processing time by 40% and improving integration efficiency.
+- Engineered an Axon Framework‑based duplicate detection system, removing redundant records, improving data quality, and enhancing financial reporting accuracy and compliance.
+- Optimized the processing pipeline, increasing system throughput by 30% while handling millions of rows with low latency and minimal resource consumption.
+- Developed unit tests with JUnit and Mockito, achieving 98% code coverage, ensuring robust error handling and supporting zero downtime in production.
+
+PROJECTS
+Distributed Rate Limiter
+- Designed and implemented a Redis‑based distributed rate limiter using the Token Bucket algorithm to regulate API traffic across multiple service instances and prevent system overload.
+- Developed REST APIs for dynamic rate‑limit configuration and optimized request processing for high‑throughput backend systems with low latency.
+
+NameIt – AI Project Naming Assistant
+- Built a full‑stack application using Spring Boot, React JS, and LLM APIs to generate context‑aware project name recommendations through scalable backend services and real‑time user interactions.
+- Designed and integrated REST APIs with external AI services, enabling low‑latency response generation and seamless frontend‑backend communication.
+
+EDUCATION
+Anna University (R.M.D.)
+B.E. in ECE
+CGPA: 8.9
+2019 – 2023
+
+ACHIEVEMENTS
+Solved 500+ DSA problems and earned a 4‑Star rating on LeetCode.
+Semifinalist in TechGig Geek Goddess Contest and in Code Gladiators 2023 Contest.

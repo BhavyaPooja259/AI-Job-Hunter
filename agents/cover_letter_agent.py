@@ -48,6 +48,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ai.provider import AIProvider
 from cover_letter.cover_letter import CoverLetter
 from cover_letter.cover_letter_generator import CoverLetterData, CoverLetterGenerator
 from scrapers.models import Job
@@ -110,6 +111,7 @@ class CoverLetterAgent:
         self,
         resume_text: str,
         client: "genai.Client | None" = None,
+        provider: "AIProvider | None" = None,
         template: str | None = None,
         output_dir: Path = _DEFAULT_OUTPUT_DIR,
         model: str = "gemini-2.0-flash",
@@ -119,7 +121,6 @@ class CoverLetterAgent:
         max_description_chars: int = 3000,
     ) -> None:
         self._resume_text = resume_text
-        self._client = client
         self._generator = CoverLetterGenerator(template=template)
         self._output_dir = output_dir
         self._model = model
@@ -127,6 +128,15 @@ class CoverLetterAgent:
         self._candidate_name = candidate_name
         self._candidate_email = candidate_email
         self._max_description_chars = max_description_chars
+
+        # Resolve provider: explicit provider > client wrapper > None (template mode)
+        if provider is not None:
+            self._provider: AIProvider | None = provider
+        elif client is not None:
+            from ai.gemini_provider import GeminiProvider
+            self._provider = GeminiProvider(client=client, model=model)
+        else:
+            self._provider = None
 
     # -------------------------------------------------------------------------
     # Public interface
@@ -152,7 +162,7 @@ class CoverLetterAgent:
         """
         logger.info("generating cover letter for %s @ %s", job.title, job.company)
 
-        if self._client is not None:
+        if self._provider is not None:
             letter = self._generate_with_ai(job)
         else:
             letter = self._generate_from_template(job)
@@ -167,32 +177,17 @@ class CoverLetterAgent:
     # -------------------------------------------------------------------------
 
     def _generate_with_ai(self, job: Job) -> CoverLetter:
-        """Call Gemini to produce personalised paragraphs, then assemble."""
-        from google.genai import types
-
+        """Use the configured AIProvider to produce personalised paragraphs, then assemble."""
         system = self._build_system_prompt()
         user_msg = self._build_user_message(job)
 
         try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=user_msg,
-                config=types.GenerateContentConfig(
-                    system_instruction=system,
-                    response_mime_type="application/json",
-                    response_schema=CoverLetterData,
-                    max_output_tokens=self._max_tokens,
-                ),
+            text = self._provider.complete(  # type: ignore[union-attr]
+                user_message=user_msg,
+                system_prompt=system,
+                response_schema=CoverLetterData,
+                max_tokens=self._max_tokens,
             )
-
-            text = getattr(response, "text", None)
-            if not text:
-                logger.warning(
-                    "empty Gemini response for %s @ %s — falling back to template",
-                    job.title, job.company,
-                )
-                return self._generate_from_template(job)
-
             data = CoverLetterData.model_validate_json(text)
             content = self._generator.assemble(
                 data=data,
@@ -201,9 +196,7 @@ class CoverLetterAgent:
                 candidate_name=self._candidate_name,
                 candidate_email=self._candidate_email,
             )
-            logger.info(
-                "cover letter generated for %s @ %s", job.title, job.company
-            )
+            logger.info("cover letter generated for %s @ %s", job.title, job.company)
             return CoverLetter(
                 company=job.company,
                 title=job.title,

@@ -30,17 +30,41 @@ class Settings(BaseSettings):
     # AI Provider
     # -------------------------------------------------------------------------
 
+    ai_provider: str = Field(
+        default="gemini",
+        description="Active AI provider: gemini | openrouter | groq",
+    )
     gemini_api_key: str = Field(
         default="",
         description="Google Gemini API key from aistudio.google.com",
     )
+    gemini_model: str = Field(
+        default="gemini-2.0-flash",
+        description="Gemini model ID (e.g. gemini-2.0-flash, gemini-1.5-pro)",
+    )
     ai_model: str = Field(
         default="gemini-2.0-flash",
-        description="Gemini model ID used for all AI tasks",
+        description="Legacy generic model field — prefer gemini_model / openrouter_model / groq_model",
     )
     ai_max_tokens: int = Field(
         default=4096,
         description="Maximum tokens per AI response",
+    )
+    openrouter_api_key: str = Field(
+        default="",
+        description="OpenRouter API key from openrouter.ai",
+    )
+    openrouter_model: str = Field(
+        default="openai/gpt-4o-mini",
+        description="Model slug for OpenRouter (e.g. openai/gpt-4o-mini)",
+    )
+    groq_api_key: str = Field(
+        default="",
+        description="Groq API key from console.groq.com",
+    )
+    groq_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Groq model ID (e.g. llama-3.3-70b-versatile)",
     )
 
     # -------------------------------------------------------------------------

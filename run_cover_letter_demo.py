@@ -8,9 +8,10 @@ Pipeline
   3. Pick the highest-scoring Adobe job that has a description.
   4. Extract resume text from resume/bhavya-resume.pdf via pdfplumber.
   5. Call CoverLetterAgent:
-       • AI mode   — if GEMINI_API_KEY is set, Gemini generates personalised
-                     paragraphs for opening, body, and closing.
-       • Template  — if no API key is available, a professional letter is
+       • AI mode   — if an AI provider is configured (Gemini, OpenRouter, or
+                     Groq), it generates personalised opening, body, and closing
+                     paragraphs.
+       • Template  — if no provider is available, a professional letter is
                      assembled from the built-in template (no API call needed).
   6. Save cover_{company}_{timestamp}.txt and .md under storage/cover_letters/.
   7. Print the selected job, output paths, and the first 20 lines of the letter.
@@ -18,8 +19,9 @@ Pipeline
 Requirements
 ------------
   • Run run_tailor_demo.py at least once first so Adobe jobs are in the DB.
-  • GEMINI_API_KEY in .env is optional — the demo runs without it in template
-    mode, which is still a usable (if less personalised) cover letter.
+  • An AI provider API key in .env is optional — the demo runs without one in
+    template mode, which is still a usable (if less personalised) cover letter.
+    Supported keys: GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY.
   • pdfplumber must be installed (already listed in requirements.txt).
 
 Run
@@ -41,6 +43,7 @@ logging.basicConfig(
 for ns in ("agents", "cover_letter", "database", "matching"):
     logging.getLogger(ns).setLevel(logging.INFO)
 
+from ai.factory import create_provider
 from config import settings
 from database.job_repository import JobRepository
 from matching.matcher import JobMatcher
@@ -177,21 +180,20 @@ def main() -> None:
     print("[ 4/4 ]  Generating cover letter")
     print("-" * 40)
 
-    client = None
-    if settings.gemini_api_key:
-        from google import genai
-        client = genai.Client(api_key=settings.gemini_api_key)
-        print("  Mode      : AI (Gemini) — personalised letter")
-        print("  Sending resume + job description to Gemini … (may take 10–20 s)")
+    provider = create_provider()
+    if provider is not None:
+        print(f"  Mode      : AI ({provider.name}) — personalised letter")
+        print(f"  Sending resume + job description to {provider.name} … (may take 10–20 s)")
     else:
-        print("  Mode      : Template (GEMINI_API_KEY not set)")
+        print("  Mode      : Template (AI provider unavailable)")
         print("  Assembling cover letter from built-in template …")
         print()
-        print("  Tip: add GEMINI_API_KEY to your .env for a fully personalised letter.")
+        print("  Tip: add an API key to .env for a personalised letter.")
+        print("       GEMINI_API_KEY, OPENROUTER_API_KEY, or GROQ_API_KEY")
 
     agent = CoverLetterAgent(
         resume_text=resume_text,
-        client=client,
+        provider=provider,
         candidate_name=settings.user_name or "Bhavya L",
         candidate_email=settings.user_email or "",
     )
